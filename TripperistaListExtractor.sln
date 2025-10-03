@@ -1,0 +1,27 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.33403.152
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Console.TripperistaListExtractor", "Console.TripperistaListExtractor\\Console.TripperistaListExtractor.csproj", "{E317135B-DC06-43B0-893C-BC0D390A3C7C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.TripperistaListExtractor", "Core.TripperistaListExtractor\\Core.TripperistaListExtractor.csproj", "{CD99F616-4F3B-4377-8E0E-1BCFDC39B6EF}"
+EndProject
+Global
+    GlobalSection(SolutionConfigurationPlatforms) = preSolution
+        Debug|Any CPU = Debug|Any CPU
+        Release|Any CPU = Release|Any CPU
+    EndGlobalSection
+    GlobalSection(ProjectConfigurationPlatforms) = postSolution
+        {E317135B-DC06-43B0-893C-BC0D390A3C7C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {E317135B-DC06-43B0-893C-BC0D390A3C7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {E317135B-DC06-43B0-893C-BC0D390A3C7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {E317135B-DC06-43B0-893C-BC0D390A3C7C}.Release|Any CPU.Build.0 = Release|Any CPU
+        {CD99F616-4F3B-4377-8E0E-1BCFDC39B6EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {CD99F616-4F3B-4377-8E0E-1BCFDC39B6EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {CD99F616-4F3B-4377-8E0E-1BCFDC39B6EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {CD99F616-4F3B-4377-8E0E-1BCFDC39B6EF}.Release|Any CPU.Build.0 = Release|Any CPU
+    EndGlobalSection
+    GlobalSection(SolutionProperties) = preSolution
+        HideSolutionNode = FALSE
+    EndGlobalSection
+EndGlobal
