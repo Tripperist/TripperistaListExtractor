@@ -37,7 +37,7 @@ public sealed class CsvFileWriter(string path, ILogger<CsvFileWriter> logger) : 
             });
 
             // Emit a header row so downstream consumers immediately understand each column.
-            csv.WriteHeader<CsvRecord>();
+            await csv.WriteHeaderAsync<CsvRecord>().ConfigureAwait(false);
             await csv.NextRecordAsync().ConfigureAwait(false);
 
             foreach (var place in list.Places)
@@ -45,7 +45,7 @@ public sealed class CsvFileWriter(string path, ILogger<CsvFileWriter> logger) : 
                 cancellationToken.ThrowIfCancellationRequested();
                 // Materialise an intermediate record to keep CsvHelper mapping explicit and maintain column ordering.
                 var record = new CsvRecord(place.Name, place.Address, place.Latitude, place.Longitude, place.Note, place.ImageUrl);
-                csv.WriteRecord(record);
+                await csv.WriteRecordAsync(record).ConfigureAwait(false);
                 await csv.NextRecordAsync().ConfigureAwait(false);
             }
 
