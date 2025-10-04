@@ -20,5 +20,12 @@ internal static class ResourceCatalog
     internal static ResourceManager Logs { get; } = new(
         "Console.TripperistaListExtractor.Resources.ConsoleLogMessages",
         typeof(ResourceCatalog).Assembly);
+
+    /// <summary>
+    /// Gets the help resource manager.
+    /// </summary>
+    internal static ResourceManager Help { get; } = new(
+        "Console.TripperistaListExtractor.Resources.ConsoleHelpMessages",
+        typeof(ResourceCatalog).Assembly);
 }
 }

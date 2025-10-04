@@ -1,7 +1,5 @@
-using System.CommandLine;
-using System.Linq;
 using Console.TripperistaListExtractor.Commands;
-using Core.TripperistaListExtractor.Options;
+using Console.TripperistaListExtractor.Parsing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,7 +8,8 @@ using Service.TripperistaListExtractor.Implementations;
 using Service.TripperistaListExtractor.Parsers;
 using Service.TripperistaListExtractor.Writers;
 
-var verboseRequested = args.Any(arg => string.Equals(arg, "--verbose", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "-v", StringComparison.OrdinalIgnoreCase));
+// Infer verbose logging before we spin up the host so the logging pipeline is configured correctly for diagnostics.
+var verboseRequested = DetermineVerboseRequested(args);
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
@@ -28,64 +27,66 @@ builder.Services.AddSingleton<ISavedListPayloadParser, SavedListPayloadParser>()
 builder.Services.AddSingleton<IFileWriterFactory, FileWriterFactory>();
 builder.Services.AddSingleton<IFileNameGenerator, FileNameGenerator>();
 builder.Services.AddSingleton<IGoogleMapsListExtractorService, GoogleMapsListExtractorService>();
+builder.Services.AddSingleton<ICommandLineParser, CommandLineParser>();
 builder.Services.AddSingleton<ListExtractionCommandHandler>();
 
 using var host = builder.Build();
+var parser = host.Services.GetRequiredService<ICommandLineParser>();
+// Parse the command line using the bespoke parser to avoid System.CommandLine version drift.
+var parseResult = parser.Parse(args);
 
-var rootCommand = BuildRootCommand(host.Services);
-return await rootCommand.InvokeAsync(args);
-
-static RootCommand BuildRootCommand(IServiceProvider services)
+if (parseResult.ShowHelp)
 {
-    var inputUrlOption = new Option<string>("--inputSavedListUrl", description: "The Google Maps saved list share URL.")
-    {
-        IsRequired = true,
-    };
+    System.Console.WriteLine(parser.GetUsage());
+    return 0;
+}
 
-    var outputKmlOption = new Option<string?>("--outputKmlFile", description: "Optional KML output file name.");
-    var outputCsvOption = new Option<string?>("--outputCsvFile", description: "Optional CSV output file name.");
-    var apiKeyOption = new Option<string?>("--googlePlacesApiKey", description: "Optional Google Places API key override.");
-    var verboseOption = new Option<bool>("--verbose", description: "Enables verbose logging output.");
-    verboseOption.AddAlias("-v");
-    var headlessOption = new Option<bool>("--headless", description: "Runs the Playwright browser in headless mode.")
-    {
-        Arity = ArgumentArity.ZeroOrOne,
-        DefaultValueFactory = _ => true,
-    };
+if (!string.IsNullOrWhiteSpace(parseResult.ErrorMessage))
+{
+    System.Console.Error.WriteLine(parseResult.ErrorMessage);
+    System.Console.WriteLine(parser.GetUsage());
+    return 1;
+}
 
-    var root = new RootCommand("Extracts Google Maps saved lists to CSV and KML.")
-    {
-        inputUrlOption,
-        outputKmlOption,
-        outputCsvOption,
-        apiKeyOption,
-        verboseOption,
-        headlessOption,
-    };
+var options = parseResult.Options ?? throw new InvalidOperationException("Parser returned null options without error.");
 
-    root.SetHandler(async (string inputUrl, string? kml, string? csv, string? apiKey, bool verbose, bool headless) =>
+using var scope = host.Services.CreateScope();
+var handler = scope.ServiceProvider.GetRequiredService<ListExtractionCommandHandler>();
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, eventArgs) =>
+{
+    eventArgs.Cancel = true;
+    cts.Cancel();
+};
+
+await handler.HandleAsync(options, cts.Token).ConfigureAwait(false);
+return 0;
+
+static bool DetermineVerboseRequested(string[] args)
+{
+    for (var index = 0; index < args.Length; index++)
     {
-        using var scope = services.CreateScope();
-        var handler = scope.ServiceProvider.GetRequiredService<ListExtractionCommandHandler>();
-        using var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, eventArgs) =>
+        var token = args[index];
+        // Look for the verbose switch and honour explicit true/false arguments so scripted invocations can toggle output levels.
+        if (!string.Equals(token, "--verbose", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(token, "-v", StringComparison.OrdinalIgnoreCase))
         {
-            eventArgs.Cancel = true;
-            cts.Cancel();
-        };
+            continue;
+        }
 
-        var options = new ExtractionOptions
+        var nextIndex = index + 1;
+        if (nextIndex >= args.Length || args[nextIndex].StartsWith("-", StringComparison.Ordinal))
         {
-            InputSavedListUrl = inputUrl,
-            OutputKmlFile = string.IsNullOrWhiteSpace(kml) ? null : kml,
-            OutputCsvFile = string.IsNullOrWhiteSpace(csv) ? null : csv,
-            GooglePlacesApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-            Verbose = verbose,
-            Headless = headless,
-        };
+            return true;
+        }
 
-        await handler.HandleAsync(options, cts.Token).ConfigureAwait(false);
-    }, inputUrlOption, outputKmlOption, outputCsvOption, apiKeyOption, verboseOption, headlessOption);
+        if (bool.TryParse(args[nextIndex], out var value))
+        {
+            return value;
+        }
 
-    return root;
+        return true;
+    }
+
+    return false;
 }

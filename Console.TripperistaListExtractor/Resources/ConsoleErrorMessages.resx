@@ -18,4 +18,13 @@
   <data name="MissingInputUrl" xml:space="preserve">
     <value>The --inputSavedListUrl argument is required.</value>
   </data>
+  <data name="UnknownOption" xml:space="preserve">
+    <value>Unknown option '{0}'.</value>
+  </data>
+  <data name="MissingOptionValue" xml:space="preserve">
+    <value>The option '{0}' requires a value.</value>
+  </data>
+  <data name="InvalidBoolean" xml:space="preserve">
+    <value>The option '{0}' value '{1}' is not a valid boolean.</value>
+  </data>
 </root>
