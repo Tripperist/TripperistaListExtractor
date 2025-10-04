@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExtractionStarting" xml:space="preserve">
+    <value>Starting extraction for {0}.</value>
+  </data>
+  <data name="WritingKmlMessage" xml:space="preserve">
+    <value>Writing KML output to {0}.</value>
+  </data>
+  <data name="WritingCsvMessage" xml:space="preserve">
+    <value>Writing CSV output to {0}.</value>
+  </data>
+  <data name="ExtractionCompleted" xml:space="preserve">
+    <value>Extraction completed successfully with {0} places discovered.</value>
+  </data>
+</root>
