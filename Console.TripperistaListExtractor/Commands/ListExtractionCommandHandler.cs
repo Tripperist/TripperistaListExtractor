@@ -27,12 +27,14 @@ public sealed class ListExtractionCommandHandler(
         ValidateOptions(options);
 
         var stopwatch = Stopwatch.StartNew();
+        // Emit an informational log entry so that operators can correlate console invocations with persisted telemetry.
         Logger.LogInformation(ResourceCatalog.Logs.GetString("CommandStarting") ?? "Starting extraction command.");
 
         var normalizedOptions = NormalizeOptions(options);
         await _extractor.ExtractAsync(normalizedOptions, cancellationToken).ConfigureAwait(false);
 
         stopwatch.Stop();
+        // Include the elapsed time for visibility into the end-to-end extraction duration.
         Logger.LogInformation(ResourceCatalog.Logs.GetString("CommandCompleted") ?? "Extraction command completed in {0} ms.", stopwatch.ElapsedMilliseconds);
     }
 

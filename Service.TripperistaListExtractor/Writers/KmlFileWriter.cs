@@ -20,10 +20,12 @@ public sealed class KmlFileWriter(string path, ILogger<KmlFileWriter> logger) : 
     public async Task WriteAsync(SavedList list, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(list);
+        // Log the target file path to keep operators informed of the generated artefact location.
         _logger.LogInformation(ResourceCatalog.Logs.GetString("KmlWriteStarted") ?? "Writing KML export to '{0}'.", _path);
 
         try
         {
+            // Configure an asynchronous XML writer so that we can flush data while maintaining indentation and UTF-8 encoding.
             await using var stream = new FileStream(_path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
             var settings = new XmlWriterSettings
             {
@@ -47,6 +49,7 @@ public sealed class KmlFileWriter(string path, ILogger<KmlFileWriter> logger) : 
             foreach (var place in list.Places)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                // Each place is rendered as its own placemark with optional description, address, and image metadata entries.
                 await writer.WriteStartElementAsync(null, "Placemark", null).ConfigureAwait(false);
                 await writer.WriteElementStringAsync(null, "name", null, place.Name).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(place.Note))
@@ -55,7 +58,7 @@ public sealed class KmlFileWriter(string path, ILogger<KmlFileWriter> logger) : 
                 }
 
                 await writer.WriteStartElementAsync(null, "Point", null).ConfigureAwait(false);
-                var coordinates = string.Create(CultureInfo.InvariantCulture, $"{place.Longitude},{place.Latitude},0");
+                var coordinates = string.Format(CultureInfo.InvariantCulture, "{0},{1},0", place.Longitude, place.Latitude);
                 await writer.WriteElementStringAsync(null, "coordinates", null, coordinates).ConfigureAwait(false);
                 await writer.WriteEndElementAsync().ConfigureAwait(false); // Point
 
@@ -66,6 +69,7 @@ public sealed class KmlFileWriter(string path, ILogger<KmlFileWriter> logger) : 
 
                 if (!string.IsNullOrWhiteSpace(place.ImageUrl))
                 {
+                    // The ExtendedData stanza carries ancillary metadata without violating the KML schema.
                     await writer.WriteStartElementAsync(null, "ExtendedData", null).ConfigureAwait(false);
                     await writer.WriteStartElementAsync(null, "Data", null).ConfigureAwait(false);
                     await writer.WriteAttributeStringAsync(null, "name", null, "imageUrl").ConfigureAwait(false);

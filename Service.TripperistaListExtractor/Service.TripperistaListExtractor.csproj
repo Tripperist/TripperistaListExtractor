@@ -15,10 +15,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
     <PackageReference Include="Microsoft.Playwright" Version="1.44.0" />
-    <PackageReference Include="Microsoft.SemanticKernel" Version="1.13.1" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Resources/ErrorMessages.resx" />
-    <EmbeddedResource Include="Resources/LogMessages.resx" />
+    <EmbeddedResource Include="Resources/ServiceErrorMessages.resx" />
+    <EmbeddedResource Include="Resources/ServiceLogMessages.resx" />
   </ItemGroup>
 </Project>

@@ -22,10 +22,12 @@ public sealed class CsvFileWriter(string path, ILogger<CsvFileWriter> logger) : 
     {
         ArgumentNullException.ThrowIfNull(list);
 
+        // Capture where we are writing the CSV file so operators can trace output locations easily.
         _logger.LogInformation(ResourceCatalog.Logs.GetString("CsvWriteStarted") ?? "Writing CSV export to '{0}'.", _path);
 
         try
         {
+            // The asynchronous FileStream and StreamWriter ensure large exports remain responsive.
             await using var stream = new FileStream(_path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
             await using var writer = new StreamWriter(stream, Encoding.UTF8, bufferSize: 1024, leaveOpen: false);
             await using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture)
@@ -34,17 +36,20 @@ public sealed class CsvFileWriter(string path, ILogger<CsvFileWriter> logger) : 
                 NewLine = Environment.NewLine,
             });
 
+            // Emit a header row so downstream consumers immediately understand each column.
             csv.WriteHeader<CsvRecord>();
             await csv.NextRecordAsync().ConfigureAwait(false);
 
             foreach (var place in list.Places)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                // Materialise an intermediate record to keep CsvHelper mapping explicit and maintain column ordering.
                 var record = new CsvRecord(place.Name, place.Address, place.Latitude, place.Longitude, place.Note, place.ImageUrl);
                 csv.WriteRecord(record);
                 await csv.NextRecordAsync().ConfigureAwait(false);
             }
 
+            // Flush ensures buffered data reaches disk prior to logging completion.
             await writer.FlushAsync().ConfigureAwait(false);
             _logger.LogInformation(ResourceCatalog.Logs.GetString("CsvWriteCompleted") ?? "CSV export completed ({0} places).", list.Places.Count);
         }

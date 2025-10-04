@@ -22,7 +22,7 @@
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Resources/ErrorMessages.resx" />
-    <EmbeddedResource Include="Resources/LogMessages.resx" />
+    <EmbeddedResource Include="Resources/ConsoleErrorMessages.resx" />
+    <EmbeddedResource Include="Resources/ConsoleLogMessages.resx" />
   </ItemGroup>
 </Project>

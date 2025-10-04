@@ -22,6 +22,7 @@ public sealed class SavedListPayloadParser(ILogger<SavedListPayloadParser> logge
             throw new ArgumentException(ResourceCatalog.Errors.GetString("InvalidPayload"), nameof(payload));
         }
 
+        // Normalise the payload so it can be consumed as JSON regardless of whether it was string-escaped.
         var normalized = NormalizePayload(payload);
 
         using var document = JsonDocument.Parse(normalized, new JsonDocumentOptions
@@ -46,7 +47,8 @@ public sealed class SavedListPayloadParser(ILogger<SavedListPayloadParser> logge
             string.IsNullOrWhiteSpace(description) ? null : description,
             creator);
 
-        _logger.LogDebug(ResourceCatalog.Logs.GetString("ExtractionCompleted") ?? "Extraction completed for list '{0}' with {1} places.", header.Name, places.Count);
+        // At debug level we record the parsed list name and item count to aid downstream troubleshooting.
+        _logger.LogDebug(ResourceCatalog.Logs.GetString("ExtractionCompleted") ?? "Finished extraction for '{ListName}' with {PlaceCount} places.", header.Name, places.Count);
 
         return new SavedList(header, places);
     }

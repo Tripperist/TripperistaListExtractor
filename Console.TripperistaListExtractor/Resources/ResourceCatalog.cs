@@ -11,14 +11,14 @@ internal static class ResourceCatalog
     /// Gets the error resource manager.
     /// </summary>
     internal static ResourceManager Errors { get; } = new(
-        "Console.TripperistaListExtractor.Resources.ErrorMessages",
+        "Console.TripperistaListExtractor.Resources.ConsoleErrorMessages",
         typeof(ResourceCatalog).Assembly);
 
     /// <summary>
     /// Gets the log resource manager.
     /// </summary>
     internal static ResourceManager Logs { get; } = new(
-        "Console.TripperistaListExtractor.Resources.LogMessages",
+        "Console.TripperistaListExtractor.Resources.ConsoleLogMessages",
         typeof(ResourceCatalog).Assembly);
 }
 }

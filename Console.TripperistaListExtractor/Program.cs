@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 using Service.TripperistaListExtractor.Contracts;
 using Service.TripperistaListExtractor.Implementations;
 using Service.TripperistaListExtractor.Parsers;
-using Service.TripperistaListExtractor.SemanticKernel;
 using Service.TripperistaListExtractor.Writers;
 
 var verboseRequested = args.Any(arg => string.Equals(arg, "--verbose", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "-v", StringComparison.OrdinalIgnoreCase));
@@ -27,7 +26,7 @@ builder.Logging.SetMinimumLevel(verboseRequested ? LogLevel.Debug : LogLevel.Inf
 
 builder.Services.AddSingleton<ISavedListPayloadParser, SavedListPayloadParser>();
 builder.Services.AddSingleton<IFileWriterFactory, FileWriterFactory>();
-builder.Services.AddSingleton<IAiMetadataSanitizer, SemanticKernelMetadataSanitizer>();
+builder.Services.AddSingleton<IFileNameGenerator, FileNameGenerator>();
 builder.Services.AddSingleton<IGoogleMapsListExtractorService, GoogleMapsListExtractorService>();
 builder.Services.AddSingleton<ListExtractionCommandHandler>();
 

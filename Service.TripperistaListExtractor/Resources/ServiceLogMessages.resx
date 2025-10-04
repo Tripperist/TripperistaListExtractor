@@ -12,6 +12,24 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="ExtractionStarted" xml:space="preserve">
+    <value>Starting extraction for '{Url}'.</value>
+  </data>
+  <data name="ExtractionCompleted" xml:space="preserve">
+    <value>Finished extraction for '{ListName}' with {PlaceCount} places.</value>
+  </data>
+  <data name="PlaywrightScrolling" xml:space="preserve">
+    <value>Scrolling iteration {Iteration} to load additional places.</value>
+  </data>
+  <data name="PlaywrightPayloadLocated" xml:space="preserve">
+    <value>Located payload fragment of length {Length} characters.</value>
+  </data>
+  <data name="PersistingCsv" xml:space="preserve">
+    <value>Writing CSV export to '{Csv}'.</value>
+  </data>
+  <data name="PersistingKml" xml:space="preserve">
+    <value>Writing KML export to '{Kml}'.</value>
+  </data>
   <data name="CsvWriteStarted" xml:space="preserve">
     <value>Writing CSV export to '{0}'.</value>
   </data>
@@ -23,20 +41,5 @@
   </data>
   <data name="KmlWriteCompleted" xml:space="preserve">
     <value>KML export completed ({0} places).</value>
-  </data>
-  <data name="ExtractionStarted" xml:space="preserve">
-    <value>Beginning extraction for list URL '{0}'.</value>
-  </data>
-  <data name="ExtractionCompleted" xml:space="preserve">
-    <value>Extraction completed for list '{0}' with {1} places.</value>
-  </data>
-  <data name="PlaywrightScrolling" xml:space="preserve">
-    <value>Scrolling to load additional list entries (iteration {0}).</value>
-  </data>
-  <data name="PlaywrightPayloadLocated" xml:space="preserve">
-    <value>Located saved list payload (length {0}).</value>
-  </data>
-  <data name="SemanticSanitizerUsed" xml:space="preserve">
-    <value>AI sanitizer produced slug '{0}'.</value>
   </data>
 </root>
