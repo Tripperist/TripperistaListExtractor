@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ExtractionStarted" xml:space="preserve">
+    <value>Starting extraction for '{Url}'.</value>
+  </data>
+  <data name="ExtractionCompleted" xml:space="preserve">
+    <value>Finished extraction for '{ListName}' with {PlaceCount} places.</value>
+  </data>
+  <data name="PlaywrightScrolling" xml:space="preserve">
+    <value>Scrolling iteration {Iteration} to load additional places.</value>
+  </data>
+  <data name="PlaywrightPayloadLocated" xml:space="preserve">
+    <value>Located payload fragment of length {Length} characters.</value>
+  </data>
+  <data name="PersistingCsv" xml:space="preserve">
+    <value>Writing CSV export to '{Csv}'.</value>
+  </data>
+  <data name="PersistingKml" xml:space="preserve">
+    <value>Writing KML export to '{Kml}'.</value>
+  </data>
+  <data name="CsvWriteStarted" xml:space="preserve">
+    <value>Writing CSV export to '{0}'.</value>
+  </data>
+  <data name="CsvWriteCompleted" xml:space="preserve">
+    <value>CSV export completed ({0} places).</value>
+  </data>
+  <data name="KmlWriteStarted" xml:space="preserve">
+    <value>Writing KML export to '{0}'.</value>
+  </data>
+  <data name="KmlWriteCompleted" xml:space="preserve">
+    <value>KML export completed ({0} places).</value>
+  </data>
+</root>
