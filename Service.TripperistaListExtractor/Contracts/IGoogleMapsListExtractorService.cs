@@ -1,18 +1,18 @@
+using Core.TripperistaListExtractor.Models;
+using Core.TripperistaListExtractor.Options;
+
 namespace Service.TripperistaListExtractor.Contracts;
 
-using Core.TripperistaListExtractor.Models;
-
 /// <summary>
-///     Defines the behaviour required to extract saved list information from Google Maps.
+/// Defines the behavior required to extract saved list data from Google Maps.
 /// </summary>
 public interface IGoogleMapsListExtractorService
 {
     /// <summary>
-    ///     Extracts the saved list information located at the specified URI.
+    /// Extracts the saved list data using the supplied <paramref name="options"/>.
     /// </summary>
-    /// <param name="listUri">The URI of the Google Maps saved list.</param>
-    /// <param name="verbose">A value indicating whether verbose diagnostics should be emitted.</param>
-    /// <param name="cancellationToken">The cancellation token that coordinates shutdown.</param>
-    /// <returns>The fully populated saved list.</returns>
-    Task<SavedList> ExtractAsync(Uri listUri, bool verbose, CancellationToken cancellationToken);
+    /// <param name="options">The validated extraction options.</param>
+    /// <param name="cancellationToken">The cancellation token for cooperative cancellation.</param>
+    /// <returns>The hydrated <see cref="SavedList"/>.</returns>
+    Task<SavedList> ExtractAsync(ExtractionOptions options, CancellationToken cancellationToken);
 }

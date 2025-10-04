@@ -12,10 +12,10 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="ExtractionFailed" xml:space="preserve">
-    <value>Failed to extract saved list data from {0}.</value>
+  <data name="ValidationFailed" xml:space="preserve">
+    <value>Validation failed: {0}</value>
   </data>
-  <data name="FileWriteFailed" xml:space="preserve">
-    <value>Unable to persist the requested output files.</value>
+  <data name="MissingInputUrl" xml:space="preserve">
+    <value>The --inputSavedListUrl argument is required.</value>
   </data>
 </root>

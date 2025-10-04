@@ -1,124 +1,82 @@
-namespace Console.TripperistaListExtractor.Commands;
-
-using System.IO;
-using System.Text;
-using Console.TripperistaListExtractor.Hosting;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
+using System.Linq;
 using Core.TripperistaListExtractor.Commands;
-using Core.TripperistaListExtractor.Models;
 using Core.TripperistaListExtractor.Options;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Service.TripperistaListExtractor.Contracts;
+using Console.TripperistaListExtractor.Resources;
+
+namespace Console.TripperistaListExtractor.Commands;
 
 /// <summary>
-///     Implements the concrete command used to orchestrate the end-to-end extraction workflow.
+/// Handles the console command that orchestrates Google Maps list extraction.
 /// </summary>
 public sealed class ListExtractionCommandHandler(
-    ResourceBundle resourceBundle,
-    ILogger<ListExtractionCommandHandler> logger,
-    IGoogleMapsListExtractorService extractorService,
-    IFileWriterFactory fileWriterFactory
-) : CommandHandler<ExtractionOptions>(resourceBundle.LogResourceManager, resourceBundle.ErrorResourceManager)
+    IGoogleMapsListExtractorService extractor,
+    IConfiguration configuration,
+    ILogger<ListExtractionCommandHandler> logger) : CommandHandler<ExtractionOptions>(logger)
 {
-    private readonly ILogger<ListExtractionCommandHandler> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly IGoogleMapsListExtractorService _extractorService = extractorService ?? throw new ArgumentNullException(nameof(extractorService));
-    private readonly IFileWriterFactory _fileWriterFactory = fileWriterFactory ?? throw new ArgumentNullException(nameof(fileWriterFactory));
+    private readonly IGoogleMapsListExtractorService _extractor = extractor ?? throw new ArgumentNullException(nameof(extractor));
+    private readonly IConfiguration _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
 
     /// <inheritdoc />
-    protected override async Task<int> ExecuteInternalAsync(ExtractionOptions options, CancellationToken cancellationToken)
+    protected override async Task ExecuteCoreAsync(ExtractionOptions options, CancellationToken cancellationToken)
     {
-        var inputUri = new Uri(options.InputSavedListUrl!, UriKind.Absolute);
-        using var scope = _logger.BeginScope("InputUrl:{InputUrl}", inputUri);
+        ValidateOptions(options);
 
-        _logger.LogInformation(GetLogMessage("ExtractionStarting"), inputUri);
+        var stopwatch = Stopwatch.StartNew();
+        Logger.LogInformation(ResourceCatalog.Logs.GetString("CommandStarting") ?? "Starting extraction command.");
 
-        SavedList savedList;
-        try
-        {
-            savedList = await _extractorService.ExtractAsync(inputUri, options.Verbose, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, GetErrorMessage("ExtractionFailed"), inputUri);
-            return -1;
-        }
+        var normalizedOptions = NormalizeOptions(options);
+        await _extractor.ExtractAsync(normalizedOptions, cancellationToken).ConfigureAwait(false);
 
-        var baseFileName = CreateSafeFileStem(savedList.Header.Name);
-        var kmlPath = ResolveOutputPath(options.OutputKmlFile, baseFileName, ".kml");
-        var csvPath = ResolveOutputPath(options.OutputCsvFile, baseFileName, ".csv");
-
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(kmlPath))
-            {
-                _logger.LogInformation(GetLogMessage("WritingKmlMessage"), kmlPath);
-                var kmlWriter = _fileWriterFactory.CreateKmlWriter();
-                await kmlWriter.WriteAsync(savedList, kmlPath!, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (!string.IsNullOrWhiteSpace(csvPath))
-            {
-                _logger.LogInformation(GetLogMessage("WritingCsvMessage"), csvPath);
-                var csvWriter = _fileWriterFactory.CreateCsvWriter();
-                await csvWriter.WriteAsync(savedList, csvPath!, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, GetErrorMessage("FileWriteFailed"));
-            return -2;
-        }
-
-        _logger.LogInformation(GetLogMessage("ExtractionCompleted"), savedList.Places.Count);
-        return 0;
+        stopwatch.Stop();
+        Logger.LogInformation(ResourceCatalog.Logs.GetString("CommandCompleted") ?? "Extraction command completed in {0} ms.", stopwatch.ElapsedMilliseconds);
     }
 
-    /// <summary>
-    ///     Builds a deterministic file path using the supplied file name or a safe representation of the list title.
-    /// </summary>
-    /// <param name="providedPath">The file name supplied on the command line.</param>
-    /// <param name="fallbackStem">The fallback file stem derived from the list name.</param>
-    /// <param name="extension">The expected file extension including the leading dot.</param>
-    /// <returns>The fully qualified file path.</returns>
-    private static string ResolveOutputPath(string? providedPath, string fallbackStem, string extension)
+    private static void ValidateOptions(ExtractionOptions options)
     {
-        var candidate = providedPath;
-        if (string.IsNullOrWhiteSpace(candidate))
+        var results = new List<ValidationResult>();
+        var context = new ValidationContext(options);
+        if (!Validator.TryValidateObject(options, context, results, true))
         {
-            candidate = fallbackStem + extension;
+            var message = ResourceCatalog.Errors.GetString("ValidationFailed") ?? "Validation failed";
+            throw new ValidationException(string.Format(message, string.Join(", ", results.Select(r => r.ErrorMessage))));
         }
-        else if (!candidate.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
-        {
-            candidate = candidate + extension;
-        }
-
-        var directory = Path.GetDirectoryName(candidate);
-        if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        return Path.GetFullPath(candidate!);
     }
 
-    /// <summary>
-    ///     Sanitises the supplied stem to ensure it can be used as a file name on all platforms.
-    /// </summary>
-    /// <param name="name">The original name extracted from the saved list.</param>
-    /// <returns>A safe file stem.</returns>
-    private static string CreateSafeFileStem(string name)
+    private ExtractionOptions NormalizeOptions(ExtractionOptions options)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        var apiKey = options.GooglePlacesApiKey;
+        string? source = null;
+
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            return "tripperista-list";
+            apiKey = Environment.GetEnvironmentVariable("GOOGLE_PLACES_API_KEY");
+            source = apiKey is null ? source : "environment";
         }
 
-        var invalidCharacters = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(name.Length);
-        foreach (var ch in name)
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            builder.Append(Array.IndexOf(invalidCharacters, ch) >= 0 ? '_' : ch);
+            apiKey = _configuration["Google:PlacesApiKey"] ?? _configuration["googlePlacesApiKey"];
+            source = apiKey is null ? source : "configuration";
         }
 
-        return builder.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(apiKey) && source is not null)
+        {
+            Logger.LogInformation(ResourceCatalog.Logs.GetString("UsingApiKeySource") ?? "Using Google Places API key from {0}.", source);
+        }
+
+        return new ExtractionOptions
+        {
+            InputSavedListUrl = options.InputSavedListUrl,
+            OutputCsvFile = options.OutputCsvFile,
+            OutputKmlFile = options.OutputKmlFile,
+            GooglePlacesApiKey = apiKey,
+            Headless = options.Headless,
+            Verbose = options.Verbose,
+        };
     }
 }

@@ -1,19 +1,23 @@
+using Core.TripperistaListExtractor.Models;
+
 namespace Service.TripperistaListExtractor.Contracts;
 
 /// <summary>
-///     Implements the factory pattern to build file writer services on demand.
+/// Provides file writer instances for persisting saved list data.
 /// </summary>
 public interface IFileWriterFactory
 {
     /// <summary>
-    ///     Resolves a CSV writer implementation.
+    /// Creates a CSV file writer targeting the supplied <paramref name="path"/>.
     /// </summary>
-    /// <returns>The CSV writer service.</returns>
-    ICsvFileWriter CreateCsvWriter();
+    /// <param name="path">The file system path.</param>
+    /// <returns>An <see cref="ICsvFileWriter"/>.</returns>
+    ICsvFileWriter CreateCsv(string path);
 
     /// <summary>
-    ///     Resolves a KML writer implementation.
+    /// Creates a KML file writer targeting the supplied <paramref name="path"/>.
     /// </summary>
-    /// <returns>The KML writer service.</returns>
-    IKmlFileWriter CreateKmlWriter();
+    /// <param name="path">The file system path.</param>
+    /// <returns>An <see cref="IKmlFileWriter"/>.</returns>
+    IKmlFileWriter CreateKml(string path);
 }

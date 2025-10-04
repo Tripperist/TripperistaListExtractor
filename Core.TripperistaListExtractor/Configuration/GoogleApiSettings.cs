@@ -1,15 +1,17 @@
+using System.ComponentModel.DataAnnotations;
+using Core.TripperistaListExtractor.Configuration;
+
 namespace Core.TripperistaListExtractor.Configuration;
 
-using System.ComponentModel.DataAnnotations;
-
 /// <summary>
-///     Represents the strongly-typed configuration section used to supply Google Places credentials.
+/// Represents configuration required to access Google APIs.
 /// </summary>
 public sealed class GoogleApiSettings
 {
     /// <summary>
-    ///     Gets or sets the API key that authorises Google Places requests.
+    /// Gets or sets the Google Places API key.
     /// </summary>
-    [Required(AllowEmptyStrings = false, ErrorMessage = "The Google Places API key cannot be empty.")]
-    public string? ApiKey { get; set; }
+    [Required]
+    [NotEmptyOrWhitespace]
+    public string ApiKey { get; init; } = string.Empty;
 }

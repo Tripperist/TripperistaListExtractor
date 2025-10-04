@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CsvWriteStarted" xml:space="preserve">
+    <value>Writing CSV export to '{0}'.</value>
+  </data>
+  <data name="CsvWriteCompleted" xml:space="preserve">
+    <value>CSV export completed ({0} places).</value>
+  </data>
+  <data name="KmlWriteStarted" xml:space="preserve">
+    <value>Writing KML export to '{0}'.</value>
+  </data>
+  <data name="KmlWriteCompleted" xml:space="preserve">
+    <value>KML export completed ({0} places).</value>
+  </data>
+  <data name="ExtractionStarted" xml:space="preserve">
+    <value>Beginning extraction for list URL '{0}'.</value>
+  </data>
+  <data name="ExtractionCompleted" xml:space="preserve">
+    <value>Extraction completed for list '{0}' with {1} places.</value>
+  </data>
+  <data name="PlaywrightScrolling" xml:space="preserve">
+    <value>Scrolling to load additional list entries (iteration {0}).</value>
+  </data>
+  <data name="PlaywrightPayloadLocated" xml:space="preserve">
+    <value>Located saved list payload (length {0}).</value>
+  </data>
+  <data name="SemanticSanitizerUsed" xml:space="preserve">
+    <value>AI sanitizer produced slug '{0}'.</value>
+  </data>
+</root>

@@ -1,248 +1,272 @@
-namespace Service.TripperistaListExtractor.Parsers;
-
 using System.Linq;
 using System.Text.Json;
 using Core.TripperistaListExtractor.Models;
+using Microsoft.Extensions.Logging;
 using Service.TripperistaListExtractor.Contracts;
+using Service.TripperistaListExtractor.Resources;
+
+namespace Service.TripperistaListExtractor.Parsers;
 
 /// <summary>
-///     Converts the loosely structured Google Maps payload into strongly typed domain entities.
+/// Parses saved list payloads emitted by Google Maps scripts.
 /// </summary>
-public sealed class SavedListPayloadParser : ISavedListPayloadParser
+public sealed class SavedListPayloadParser(ILogger<SavedListPayloadParser> logger) : ISavedListPayloadParser
 {
+    private readonly ILogger<SavedListPayloadParser> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
     /// <inheritdoc />
-    public SavedList Parse(JsonElement payload)
+    public SavedList Parse(string payload)
     {
-        if (payload.ValueKind != JsonValueKind.Array)
+        if (string.IsNullOrWhiteSpace(payload))
         {
-            throw new InvalidOperationException("The payload root must be a JSON array.");
+            throw new ArgumentException(ResourceCatalog.Errors.GetString("InvalidPayload"), nameof(payload));
         }
 
-        var list = new SavedList
-        {
-            Header = ExtractHeader(payload)
-        };
+        var normalized = NormalizePayload(payload);
 
-        foreach (var placeNode in FindPlaceNodes(payload))
+        using var document = JsonDocument.Parse(normalized, new JsonDocumentOptions
         {
-            var place = MapPlace(placeNode);
-            if (!string.IsNullOrWhiteSpace(place.Name))
+            AllowTrailingCommas = true,
+            CommentHandling = JsonCommentHandling.Skip,
+        });
+
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            throw new FormatException(ResourceCatalog.Errors.GetString("InvalidPayload"));
+        }
+
+        var rootArray = root.EnumerateArray().ToArray();
+        var creator = ExtractCreator(rootArray);
+        var (name, description) = ExtractHeader(rootArray);
+        var places = ExtractPlaces(rootArray);
+
+        var header = new SavedListHeader(
+            name ?? "Untitled List",
+            string.IsNullOrWhiteSpace(description) ? null : description,
+            creator);
+
+        _logger.LogDebug(ResourceCatalog.Logs.GetString("ExtractionCompleted") ?? "Extraction completed for list '{0}' with {1} places.", header.Name, places.Count);
+
+        return new SavedList(header, places);
+    }
+
+    private static string NormalizePayload(string payload)
+    {
+        const string sentinel = ")]}'\n";
+        var trimmed = payload.Trim();
+        if (trimmed.StartsWith(sentinel, StringComparison.Ordinal))
+        {
+            trimmed = trimmed[sentinel.Length..];
+        }
+
+        try
+        {
+            _ = JsonDocument.Parse(trimmed);
+            return trimmed;
+        }
+        catch (JsonException)
+        {
+            // Attempt to unescape if the payload is still JSON encoded within a string literal.
+            var unescaped = System.Text.RegularExpressions.Regex.Unescape(trimmed);
+            return unescaped.Trim('"');
+        }
+    }
+
+    private static string? ExtractCreator(JsonElement[] rootArray)
+    {
+        foreach (var element in rootArray)
+        {
+            if (element.ValueKind != JsonValueKind.Array)
             {
-                list.Places.Add(place);
+                continue;
+            }
+
+            var values = element.EnumerateArray().ToArray();
+            if (values.Length >= 3 &&
+                values[0].ValueKind == JsonValueKind.String &&
+                values[1].ValueKind == JsonValueKind.String &&
+                values[2].ValueKind == JsonValueKind.String &&
+                values[1].GetString()?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return values[0].GetString();
             }
         }
 
-        return list;
+        return null;
     }
 
-    private static SavedListHeader ExtractHeader(JsonElement root)
+    private static (string? Name, string? Description) ExtractHeader(JsonElement[] rootArray)
     {
-        string? listName = null;
-        string? listDescription = null;
-        string? creatorName = null;
-        string? creatorImage = null;
+        string? name = null;
+        string? description = null;
+        var ownerIndex = Array.FindIndex(rootArray, static e =>
+            e.ValueKind == JsonValueKind.Array &&
+            e.GetArrayLength() >= 2 &&
+            e[0].ValueKind == JsonValueKind.String &&
+            e[1].ValueKind == JsonValueKind.String &&
+            e[1].GetString()?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true);
 
-        foreach (var element in Traverse(root))
+        var startIndex = ownerIndex >= 0 ? ownerIndex + 1 : 0;
+        for (var index = startIndex; index < rootArray.Length; index++)
         {
-            if (creatorName is null && TryReadCreator(element, out var potentialCreator, out var potentialImage))
+            var element = rootArray[index];
+            if (element.ValueKind == JsonValueKind.Array)
             {
-                creatorName = potentialCreator;
-                creatorImage = potentialImage;
+                break;
             }
 
-            if (element.ValueKind == JsonValueKind.String)
+            if (element.ValueKind != JsonValueKind.String)
             {
-                var value = element.GetString();
-                if (string.IsNullOrWhiteSpace(value))
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                if (listName is null)
-                {
-                    listName = value;
-                    continue;
-                }
+            var value = element.GetString();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
 
-                if (listDescription is null && !value.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                {
-                    listDescription = value;
-                }
+            if (name is null)
+            {
+                name = value.Trim();
+                continue;
+            }
+
+            if (description is null)
+            {
+                description = value.Trim();
+                break;
             }
         }
 
-        return new SavedListHeader
-        {
-            Name = listName ?? string.Empty,
-            Description = listDescription,
-            Creator = creatorName ?? string.Empty,
-            CreatorImageUrl = creatorImage
-        };
+        return (name, description);
     }
 
-    private static bool TryReadCreator(JsonElement element, out string? creatorName, out string? creatorImage)
+    private IReadOnlyList<SavedPlace> ExtractPlaces(JsonElement[] rootArray)
     {
-        creatorName = null;
-        creatorImage = null;
-
-        if (element.ValueKind != JsonValueKind.Array)
+        foreach (var element in rootArray)
         {
-            return false;
+            if (element.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            var entry = element.EnumerateArray().FirstOrDefault(static e =>
+                e.ValueKind == JsonValueKind.Array &&
+                e.GetArrayLength() > 1 &&
+                e[1].ValueKind == JsonValueKind.Array &&
+                e[1].GetArrayLength() > 5 &&
+                e[1][1].ValueKind == JsonValueKind.Array &&
+                e[1][1].GetArrayLength() > 5 &&
+                e[1][1][5].ValueKind == JsonValueKind.Array &&
+                e[1][1][5].GetArrayLength() > 3);
+
+            if (entry.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            return element.EnumerateArray()
+                .Select(ExtractPlace)
+                .Where(static place => place is not null)
+                .Select(static place => place!)
+                .ToArray();
         }
 
-        var values = element.EnumerateArray().ToArray();
-        if (values.Length < 3)
-        {
-            return false;
-        }
-
-        if (values[0].ValueKind == JsonValueKind.String &&
-            values[1].ValueKind == JsonValueKind.String &&
-            values[2].ValueKind == JsonValueKind.String &&
-            values[1].GetString()?.StartsWith("http", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            creatorName = values[0].GetString();
-            creatorImage = values[1].GetString();
-            return true;
-        }
-
-        return false;
+        throw new FormatException(ResourceCatalog.Errors.GetString("InvalidPayload"));
     }
 
-    private static IEnumerable<JsonElement> Traverse(JsonElement element)
+    private SavedPlace? ExtractPlace(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Array || element.GetArrayLength() < 2)
+        {
+            return null;
+        }
+
+        var details = element[1];
+        if (details.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var info = details.GetArrayLength() > 1 ? details[1] : default;
+        var name = details.GetArrayLength() > 2 && details[2].ValueKind == JsonValueKind.String
+            ? details[2].GetString() ?? string.Empty
+            : string.Empty;
+        var note = details.GetArrayLength() > 3 && details[3].ValueKind == JsonValueKind.String
+            ? details[3].GetString()
+            : null;
+
+        string? address = null;
+        double latitude = 0d;
+        double longitude = 0d;
+
+        if (info.ValueKind == JsonValueKind.Array && info.GetArrayLength() >= 6)
+        {
+            if (info[2].ValueKind == JsonValueKind.String)
+            {
+                address = info[2].GetString();
+            }
+
+            var location = info[5];
+            if (location.ValueKind == JsonValueKind.Array && location.GetArrayLength() >= 4)
+            {
+                _ = double.TryParse(location[2].GetRawText(), out latitude);
+                _ = double.TryParse(location[3].GetRawText(), out longitude);
+            }
+        }
+
+        var imageUrl = ExtractImageUrl(details);
+
+        return new SavedPlace(
+            name,
+            string.IsNullOrWhiteSpace(address) ? null : address,
+            latitude,
+            longitude,
+            string.IsNullOrWhiteSpace(note) ? null : note,
+            imageUrl);
+    }
+
+    private static string? ExtractImageUrl(JsonElement element)
+    {
+        foreach (var candidate in EnumerateStrings(element))
+        {
+            if (candidate.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
+                (candidate.Contains("googleusercontent", StringComparison.OrdinalIgnoreCase) || candidate.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateStrings(JsonElement element)
     {
         switch (element.ValueKind)
         {
+            case JsonValueKind.String:
+                yield return element.GetString()!;
+                break;
             case JsonValueKind.Array:
-                foreach (var item in element.EnumerateArray())
+                foreach (var child in element.EnumerateArray())
                 {
-                    yield return item;
-                    foreach (var nested in Traverse(item))
+                    foreach (var value in EnumerateStrings(child))
                     {
-                        yield return nested;
+                        yield return value;
                     }
                 }
-
                 break;
             case JsonValueKind.Object:
                 foreach (var property in element.EnumerateObject())
                 {
-                    yield return property.Value;
-                    foreach (var nested in Traverse(property.Value))
+                    foreach (var value in EnumerateStrings(property.Value))
                     {
-                        yield return nested;
+                        yield return value;
                     }
                 }
-
                 break;
         }
-    }
-
-    private static IEnumerable<JsonElement> FindPlaceNodes(JsonElement root)
-    {
-        if (root.ValueKind == JsonValueKind.Array)
-        {
-            var values = root.EnumerateArray().ToArray();
-            if (IsPlaceNode(values))
-            {
-                yield return root;
-            }
-
-            foreach (var child in values)
-            {
-                foreach (var nested in FindPlaceNodes(child))
-                {
-                    yield return nested;
-                }
-            }
-        }
-        else if (root.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var property in root.EnumerateObject())
-            {
-                foreach (var nested in FindPlaceNodes(property.Value))
-                {
-                    yield return nested;
-                }
-            }
-        }
-    }
-
-    private static bool IsPlaceNode(IReadOnlyList<JsonElement> nodeValues)
-    {
-        if (nodeValues.Count < 3)
-        {
-            return false;
-        }
-
-        var metadata = nodeValues[1];
-        var nameElement = nodeValues[2];
-        if (metadata.ValueKind != JsonValueKind.Array || nameElement.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        var metadataValues = metadata.EnumerateArray().ToArray();
-        if (metadataValues.Length < 6)
-        {
-            return false;
-        }
-
-        var coordinateElement = metadataValues[5];
-        if (coordinateElement.ValueKind != JsonValueKind.Array)
-        {
-            return false;
-        }
-
-        var coordinateValues = coordinateElement.EnumerateArray().ToArray();
-        if (coordinateValues.Length < 4)
-        {
-            return false;
-        }
-
-        return coordinateValues[2].ValueKind == JsonValueKind.Number && coordinateValues[3].ValueKind == JsonValueKind.Number;
-    }
-
-    private static SavedPlace MapPlace(JsonElement node)
-    {
-        var values = node.EnumerateArray().ToArray();
-        var metadataValues = values[1].EnumerateArray().ToArray();
-        var coordinateValues = metadataValues[5].EnumerateArray().ToArray();
-
-        var place = new SavedPlace
-        {
-            Name = values[2].GetString() ?? string.Empty,
-            Address = metadataValues.Length > 2 && metadataValues[2].ValueKind == JsonValueKind.String
-                ? metadataValues[2].GetString()
-                : null,
-            Latitude = coordinateValues[2].GetDouble(),
-            Longitude = coordinateValues[3].GetDouble(),
-            Note = values.Length > 3 && values[3].ValueKind == JsonValueKind.String ? values[3].GetString() : null,
-            ImageUrl = TryReadImage(values)
-        };
-
-        return place;
-    }
-
-    private static string? TryReadImage(IReadOnlyList<JsonElement> values)
-    {
-        if (values.Count <= 17)
-        {
-            return null;
-        }
-
-        var contributorElement = values[17];
-        if (contributorElement.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        var contributorValues = contributorElement.EnumerateArray().ToArray();
-        if (contributorValues.Length < 2)
-        {
-            return null;
-        }
-
-        return contributorValues[1].ValueKind == JsonValueKind.String ? contributorValues[1].GetString() : null;
     }
 }

@@ -1,38 +1,51 @@
+using System.ComponentModel.DataAnnotations;
+using Core.TripperistaListExtractor.Configuration;
+
 namespace Core.TripperistaListExtractor.Options;
 
-using System.ComponentModel.DataAnnotations;
-
 /// <summary>
-///     Represents the command-line options that control the behaviour of the list extraction workflow.
+/// Represents the validated command options for extracting a Google Maps saved list.
 /// </summary>
 public sealed class ExtractionOptions
 {
     /// <summary>
-    ///     Gets or sets the Google Maps saved list URL that should be scraped.
+    /// Gets or sets the Google Maps saved list URL to process.
     /// </summary>
-    [Required(AllowEmptyStrings = false, ErrorMessage = "The input saved list URL must be provided.")]
-    [Url(ErrorMessage = "The input saved list URL must be a valid absolute URI.")]
-    public string? InputSavedListUrl { get; set; }
+    [Required]
+    [Url]
+    public required string InputSavedListUrl { get; init; }
+        = string.Empty;
 
     /// <summary>
-    ///     Gets or sets the custom KML file name to generate. When omitted the list title will be used.
+    /// Gets or sets the optional KML output file path.
     /// </summary>
-    [FileExtensions(Extensions = "kml", ErrorMessage = "The KML output must have a .kml extension.")]
-    public string? OutputKmlFile { get; set; }
+    [NotEmptyOrWhitespace]
+    public string? OutputKmlFile { get; init; }
+        = default;
 
     /// <summary>
-    ///     Gets or sets the custom CSV file name to generate. When omitted the list title will be used.
+    /// Gets or sets the optional CSV output file path.
     /// </summary>
-    [FileExtensions(Extensions = "csv", ErrorMessage = "The CSV output must have a .csv extension.")]
-    public string? OutputCsvFile { get; set; }
+    [NotEmptyOrWhitespace]
+    public string? OutputCsvFile { get; init; }
+        = default;
 
     /// <summary>
-    ///     Gets or sets the Google Places API key that augments the scraping results.
+    /// Gets or sets the Google Places API key used to enrich place metadata.
     /// </summary>
-    public string? GooglePlacesApiKey { get; set; }
+    [NotEmptyOrWhitespace]
+    public string? GooglePlacesApiKey { get; init; }
+        = default;
 
     /// <summary>
-    ///     Gets or sets a value indicating whether verbose console logging should be enabled.
+    /// Gets or sets a value indicating whether verbose logging is enabled.
     /// </summary>
-    public bool Verbose { get; set; }
+    public bool Verbose { get; init; }
+        = false;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the scraper should run headless.
+    /// </summary>
+    public bool Headless { get; init; }
+        = true;
 }

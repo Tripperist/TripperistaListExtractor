@@ -1,70 +1,76 @@
-namespace Console.TripperistaListExtractor.Tests.Parsers;
-
-using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Service.TripperistaListExtractor.Parsers;
 
+namespace Console.TripperistaListExtractor.Tests.Parsers;
+
 /// <summary>
-///     Provides regression coverage for the <see cref="SavedListPayloadParser"/> component.
+/// Verifies the saved list payload parser logic against representative payloads.
 /// </summary>
 [TestClass]
 public sealed class SavedListPayloadParserTests
 {
+    private const string MinimalPayload = """
+)]}'
+[
+  ["list-id",1,null,1,1],
+  4,
+  [2,1,"https://www.google.com/maps/placelists/list/list-id"],
+  ["Test Creator","https://example.com/profile","123"],
+  "",
+  "Sample List",
+  "Sample Description",
+  null,
+  null,
+  [
+    [
+      null,
+      [
+        null,
+        [null,null,"123 Sample St",null,"",[null,null,45.123,-93.456],["place","alt"]],
+        "Sample Place",
+        "Sample note",
+        null,
+        null,
+        null,
+        [],
+        [],
+        [],
+        null,
+        null,
+        null,
+        [],
+        ["https://images.example/sample.jpg"]
+      ],
+      null
+    ]
+  ],
+  "\u003d13\"]"
+]
+""";
+
     /// <summary>
-    ///     Ensures the parser can map a simplified payload into strongly typed objects.
+    /// Ensures the parser materialises minimal payloads to domain models.
     /// </summary>
     [TestMethod]
-    public void Parse_ShouldPopulateSavedList()
+    public void Parse_WithMinimalPayload_ReturnsSavedList()
     {
-        const string json = """
-        [
-            "Sample List",
-            "A friendly description",
-            null,
-            null,
-            [
-                [
-                    null,
-                    [
-                        null,
-                        null,
-                        "123 Example Street",
-                        null,
-                        "",
-                        [null, null, 51.1234, -0.5678]
-                    ],
-                    "Example Place",
-                    "Remember to visit",
-                    null,
-                    null,
-                    null,
-                    [],
-                    [],
-                    [],
-                    [],
-                    null,
-                    ["Creator", "https://example.com/avatar.png", "id"]
-                ]
-            ]
-        ]
-        """;
+        var parser = new SavedListPayloadParser(new NullLogger<SavedListPayloadParser>());
 
-        using var document = JsonDocument.Parse(json);
-        var parser = new SavedListPayloadParser();
+        var savedList = parser.Parse(MinimalPayload);
 
-        var result = parser.Parse(document.RootElement);
+        savedList.Header.Name.Should().Be("Sample List");
+        savedList.Header.Description.Should().Be("Sample Description");
+        savedList.Header.Creator.Should().Be("Test Creator");
+        savedList.Places.Should().HaveCount(1);
 
-        result.Should().NotBeNull();
-        result.Header.Name.Should().Be("Sample List");
-        result.Header.Description.Should().Be("A friendly description");
-        result.Places.Should().HaveCount(1);
-
-        var place = result.Places[0];
-        place.Name.Should().Be("Example Place");
-        place.Address.Should().Be("123 Example Street");
-        place.Note.Should().Be("Remember to visit");
-        place.Latitude.Should().BeApproximately(51.1234, 0.0001);
-        place.Longitude.Should().BeApproximately(-0.5678, 0.0001);
+        var place = savedList.Places[0];
+        place.Name.Should().Be("Sample Place");
+        place.Address.Should().Be("123 Sample St");
+        place.Note.Should().Be("Sample note");
+        place.Latitude.Should().BeApproximately(45.123, 0.001);
+        place.Longitude.Should().BeApproximately(-93.456, 0.001);
+        place.ImageUrl.Should().Be("https://images.example/sample.jpg");
     }
 }

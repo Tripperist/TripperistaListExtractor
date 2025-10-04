@@ -1,19 +1,8 @@
 namespace Core.TripperistaListExtractor.Models;
 
-using System.Collections.ObjectModel;
-
 /// <summary>
-///     Represents the aggregate root that holds the saved list header and its places.
+/// Represents a hydrated Google Maps saved list including metadata and places.
 /// </summary>
-public sealed class SavedList
-{
-    /// <summary>
-    ///     Gets or sets the header metadata describing the list.
-    /// </summary>
-    public SavedListHeader Header { get; set; } = new();
-
-    /// <summary>
-    ///     Gets the places contained in the saved list.
-    /// </summary>
-    public Collection<SavedPlace> Places { get; } = new();
-}
+/// <param name="Header">The list header metadata.</param>
+/// <param name="Places">The collection of saved places.</param>
+public sealed record class SavedList(SavedListHeader Header, IReadOnlyList<SavedPlace> Places);

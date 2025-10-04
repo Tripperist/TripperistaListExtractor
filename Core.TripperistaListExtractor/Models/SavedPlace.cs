@@ -1,37 +1,18 @@
 namespace Core.TripperistaListExtractor.Models;
 
 /// <summary>
-///     Represents a single place entry within a Google Maps saved list.
+/// Represents a single place entry within a Google Maps saved list.
 /// </summary>
-public sealed class SavedPlace
-{
-    /// <summary>
-    ///     Gets or sets the public facing place name.
-    /// </summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    ///     Gets or sets the full address string provided by Google Maps.
-    /// </summary>
-    public string? Address { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the latitude component of the place coordinates.
-    /// </summary>
-    public double? Latitude { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the longitude component of the place coordinates.
-    /// </summary>
-    public double? Longitude { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the optional note supplied by the list author.
-    /// </summary>
-    public string? Note { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the optional image URL associated with the place entry.
-    /// </summary>
-    public string? ImageUrl { get; set; }
-}
+/// <param name="Name">The place name.</param>
+/// <param name="Address">The formatted address.</param>
+/// <param name="Latitude">The geographic latitude.</param>
+/// <param name="Longitude">The geographic longitude.</param>
+/// <param name="Note">An optional user-specified note.</param>
+/// <param name="ImageUrl">An optional preview image URL.</param>
+public sealed record class SavedPlace(
+    string Name,
+    string? Address,
+    double Latitude,
+    double Longitude,
+    string? Note,
+    string? ImageUrl);

@@ -1,156 +1,146 @@
-namespace Service.TripperistaListExtractor.Implementations;
-
-using System.Text;
-using System.Text.Json;
+using System.Collections.Generic;
 using Core.TripperistaListExtractor.Models;
+using Core.TripperistaListExtractor.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using Service.TripperistaListExtractor.Contracts;
+using Service.TripperistaListExtractor.Resources;
+using Service.TripperistaListExtractor.SemanticKernel;
+
+namespace Service.TripperistaListExtractor.Implementations;
 
 /// <summary>
-///     Uses Microsoft Playwright to scrape Google Maps saved list pages and build domain models.
+/// Coordinates the full saved list extraction workflow using Playwright and payload parsing.
 /// </summary>
-public sealed class GoogleMapsListExtractorService(ILogger<GoogleMapsListExtractorService> logger, ISavedListPayloadParser payloadParser)
-    : IGoogleMapsListExtractorService
+public sealed class GoogleMapsListExtractorService(
+    ILogger<GoogleMapsListExtractorService> logger,
+    ISavedListPayloadParser payloadParser,
+    IFileWriterFactory fileWriterFactory,
+    IAiMetadataSanitizer metadataSanitizer) : IGoogleMapsListExtractorService
 {
-    private const string PayloadStartMarker = ")]}'\n";
-    private const string PayloadEndMarker = "\\u003d13\"]";
-
     private readonly ILogger<GoogleMapsListExtractorService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly ISavedListPayloadParser _payloadParser = payloadParser ?? throw new ArgumentNullException(nameof(payloadParser));
+    private readonly IFileWriterFactory _fileWriterFactory = fileWriterFactory ?? throw new ArgumentNullException(nameof(fileWriterFactory));
+    private readonly IAiMetadataSanitizer _metadataSanitizer = metadataSanitizer ?? throw new ArgumentNullException(nameof(metadataSanitizer));
 
     /// <inheritdoc />
-    public async Task<SavedList> ExtractAsync(Uri listUri, bool verbose, CancellationToken cancellationToken)
+    public async Task<SavedList> ExtractAsync(ExtractionOptions options, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(listUri);
+        ArgumentNullException.ThrowIfNull(options);
 
-        using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
+        _logger.LogInformation(ResourceCatalog.Logs.GetString("ExtractionStarted") ?? "Beginning extraction for list URL '{0}'.", options.InputSavedListUrl);
+
+        using var playwright = await Microsoft.Playwright.Playwright.CreateAsync().ConfigureAwait(false);
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
-            Headless = true,
-            Args = new[] { "--disable-dev-shm-usage", "--no-sandbox" }
+            Headless = options.Headless,
         }).ConfigureAwait(false);
 
-        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
-            IgnoreHTTPSErrors = true,
-            ViewportSize = null
+            Locale = "en-US",
         }).ConfigureAwait(false);
 
         var page = await context.NewPageAsync().ConfigureAwait(false);
-
-        if (verbose)
-        {
-            page.Console += (_, message) => _logger.LogDebug("Playwright console: {Text}", message.Text);
-            page.PageError += (_, message) => _logger.LogWarning("Page error: {Message}", message);
-        }
-
-        _logger.LogInformation("Navigating to {Uri}", listUri);
-        await page.GotoAsync(listUri.ToString(), new PageGotoOptions
+        var response = await page.GotoAsync(options.InputSavedListUrl, new PageGotoOptions
         {
             WaitUntil = WaitUntilState.NetworkIdle,
-            Timeout = 60000
+            Timeout = 120_000,
         }).ConfigureAwait(false);
 
-        await page.WaitForSelectorAsync("div[role=\"main\"]", new PageWaitForSelectorOptions
+        if (response is null || !response.Ok)
         {
-            Timeout = 60000
-        }).ConfigureAwait(false);
+            throw new InvalidOperationException(ResourceCatalog.Errors.GetString("PlaywrightNavigationFailed"));
+        }
 
         await EnsureListFullyLoadedAsync(page, cancellationToken).ConfigureAwait(false);
 
-        var scriptContent = await page.EvaluateAsync<string>(@"() => {
-            const scripts = Array.from(document.querySelectorAll('head > script'));
-            if (scripts.length < 2) {
-                return '';
-            }
-            const target = scripts[1];
-            return target.textContent ?? '';
-        }").ConfigureAwait(false);
+        var payload = await ExtractPayloadAsync(page).ConfigureAwait(false);
+        var savedList = _payloadParser.Parse(payload);
 
-        if (string.IsNullOrWhiteSpace(scriptContent))
+        var slug = await _metadataSanitizer.SanitizeFilenameAsync(savedList.Header.Name, cancellationToken).ConfigureAwait(false);
+        _logger.LogDebug(ResourceCatalog.Logs.GetString("SemanticSanitizerUsed") ?? "AI sanitizer produced slug '{0}'.", slug);
+
+        var csvPath = string.IsNullOrWhiteSpace(options.OutputCsvFile)
+            ? $"{slug}.csv"
+            : options.OutputCsvFile!;
+        var kmlPath = string.IsNullOrWhiteSpace(options.OutputKmlFile)
+            ? $"{slug}.kml"
+            : options.OutputKmlFile!;
+
+        var persistenceTasks = new List<Task>();
+        if (!string.IsNullOrWhiteSpace(csvPath))
         {
-            throw new InvalidOperationException("The expected payload script could not be located.");
+            persistenceTasks.Add(_fileWriterFactory.CreateCsv(csvPath).WriteAsync(savedList, cancellationToken));
         }
 
-        var payload = ExtractPayload(scriptContent);
-        var parsed = await page.EvaluateAsync<JsonElement>("payload => JSON.parse(payload)", payload).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(kmlPath))
+        {
+            persistenceTasks.Add(_fileWriterFactory.CreateKml(kmlPath).WriteAsync(savedList, cancellationToken));
+        }
 
-        return _payloadParser.Parse(parsed);
+        await Task.WhenAll(persistenceTasks).ConfigureAwait(false);
+
+        _logger.LogInformation(ResourceCatalog.Logs.GetString("ExtractionCompleted") ?? "Extraction completed for list '{0}' with {1} places.", savedList.Header.Name, savedList.Places.Count);
+        return savedList;
     }
 
-    private static async Task EnsureListFullyLoadedAsync(IPage page, CancellationToken cancellationToken)
+    private async Task EnsureListFullyLoadedAsync(IPage page, CancellationToken cancellationToken)
     {
-        var scrollableHandle = await page.QuerySelectorAsync("div[role=\"main\"] div.m6QErb.DxyBCb.kA9KIf.dS8AEf.XiKgde.ussYcc").ConfigureAwait(false);
-        if (scrollableHandle is null)
-        {
-            return;
-        }
+        const int maxIterations = 40;
+        var previousHeight = 0d;
 
-        var iterations = 0;
-        while (iterations < 200)
+        for (var iteration = 0; iteration < maxIterations; iteration++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var scrolled = await scrollableHandle.EvaluateAsync<bool>(@"async element => {
-                const previous = element.scrollTop;
-                element.scrollBy(0, element.clientHeight);
-                await new Promise(resolve => setTimeout(resolve, 350));
-                return element.scrollTop !== previous;
-            }").ConfigureAwait(false);
+            _logger.LogDebug(ResourceCatalog.Logs.GetString("PlaywrightScrolling") ?? "Scrolling to load additional list entries (iteration {0}).", iteration + 1);
 
-            if (!scrolled)
+            var currentHeight = await page.EvaluateAsync<double>(
+                @"async () => {
+                    const main = document.querySelector('div[role="main"]');
+                    if (!main) {
+                        return 0;
+                    }
+                    const { scrollHeight } = main;
+                    main.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+                    return scrollHeight;
+                }").ConfigureAwait(false);
+
+            if (Math.Abs(currentHeight - previousHeight) < 1)
             {
                 break;
             }
 
-            iterations++;
+            previousHeight = currentHeight;
+            await page.WaitForTimeoutAsync(750).ConfigureAwait(false);
         }
     }
 
-    private static string ExtractPayload(string scriptContent)
+    private async Task<string> ExtractPayloadAsync(IPage page)
     {
-        var startIndex = scriptContent.IndexOf(PayloadStartMarker, StringComparison.Ordinal);
-        if (startIndex < 0)
-        {
-            throw new InvalidOperationException("The payload start marker was not found.");
-        }
+        const string sentinel = ")]}'\n";
+        const string terminator = "\\u003d13\"]";
 
-        startIndex += PayloadStartMarker.Length;
-        var endIndex = scriptContent.IndexOf(PayloadEndMarker, startIndex, StringComparison.Ordinal);
-        if (endIndex < 0)
+        var scripts = await page.Locator("head script").AllInnerTextsAsync().ConfigureAwait(false);
+        foreach (var script in scripts)
         {
-            throw new InvalidOperationException("The payload end marker was not found.");
-        }
-
-        var rawPayload = scriptContent.Substring(startIndex, endIndex - startIndex + PayloadEndMarker.Length);
-        return SanitizePayload(rawPayload);
-    }
-
-    private static string SanitizePayload(string rawPayload)
-    {
-        if (string.IsNullOrEmpty(rawPayload))
-        {
-            return rawPayload;
-        }
-
-        var builder = new StringBuilder(rawPayload.Length);
-        for (var index = 0; index < rawPayload.Length; index++)
-        {
-            var character = rawPayload[index];
-            if (character == '\\' && index + 1 < rawPayload.Length)
+            if (string.IsNullOrWhiteSpace(script) || !script.Contains(sentinel, StringComparison.Ordinal))
             {
-                var lookahead = rawPayload[index + 1];
-                if (lookahead == '\\' || lookahead == '"')
-                {
-                    builder.Append(lookahead);
-                    index++;
-                    continue;
-                }
+                continue;
             }
 
-            builder.Append(character);
+            var start = script.IndexOf(sentinel, StringComparison.Ordinal) + sentinel.Length;
+            var end = script.IndexOf(terminator, start, StringComparison.Ordinal);
+            if (start < sentinel.Length || end < 0)
+            {
+                continue;
+            }
+
+            var payload = script[start..(end + terminator.Length)];
+            _logger.LogDebug(ResourceCatalog.Logs.GetString("PlaywrightPayloadLocated") ?? "Located saved list payload (length {0}).", payload.Length);
+            return payload;
         }
 
-        return builder.ToString();
+        throw new InvalidOperationException(ResourceCatalog.Errors.GetString("ExtractionPayloadMissing"));
     }
 }

@@ -1,17 +1,16 @@
+using Core.TripperistaListExtractor.Models;
+
 namespace Service.TripperistaListExtractor.Contracts;
 
-using Core.TripperistaListExtractor.Models;
-using System.Text.Json;
-
 /// <summary>
-///     Provides facilities for transforming raw payloads into strongly-typed saved list models.
+/// Defines functionality for parsing Google Maps saved list payloads.
 /// </summary>
 public interface ISavedListPayloadParser
 {
     /// <summary>
-    ///     Materialises a <see cref="SavedList"/> from the JSON payload extracted from the Google Maps page.
+    /// Parses the supplied JavaScript payload into a strongly typed <see cref="SavedList"/>.
     /// </summary>
-    /// <param name="payload">The parsed payload returned by <c>JSON.parse</c>.</param>
-    /// <returns>The hydrated saved list instance.</returns>
-    SavedList Parse(JsonElement payload);
+    /// <param name="payload">The raw JavaScript payload extracted from the page.</param>
+    /// <returns>The parsed <see cref="SavedList"/>.</returns>
+    SavedList Parse(string payload);
 }

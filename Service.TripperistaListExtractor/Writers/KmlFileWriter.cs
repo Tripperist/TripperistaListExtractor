@@ -1,87 +1,93 @@
-namespace Service.TripperistaListExtractor.Writers;
-
 using System.Globalization;
-using System.IO;
 using System.Text;
-using System.Xml.Linq;
+using System.Xml;
 using Core.TripperistaListExtractor.Models;
 using Microsoft.Extensions.Logging;
 using Service.TripperistaListExtractor.Contracts;
+using Service.TripperistaListExtractor.Resources;
+
+namespace Service.TripperistaListExtractor.Writers;
 
 /// <summary>
-///     Serialises the saved list into the Keyhole Markup Language format.
+/// Implements KML persistence adhering to the Google KML specification.
 /// </summary>
-public sealed class KmlFileWriter(ILogger<KmlFileWriter> logger) : IKmlFileWriter
+public sealed class KmlFileWriter(string path, ILogger<KmlFileWriter> logger) : IKmlFileWriter
 {
+    private readonly string _path = path ?? throw new ArgumentNullException(nameof(path));
     private readonly ILogger<KmlFileWriter> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <inheritdoc />
-    public async Task WriteAsync(SavedList list, string filePath, CancellationToken cancellationToken)
+    public async Task WriteAsync(SavedList list, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(list);
-        ArgumentNullException.ThrowIfNull(filePath);
+        _logger.LogInformation(ResourceCatalog.Logs.GetString("KmlWriteStarted") ?? "Writing KML export to '{0}'.", _path);
 
-        var directory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
+        try
         {
-            Directory.CreateDirectory(directory);
+            await using var stream = new FileStream(_path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            var settings = new XmlWriterSettings
+            {
+                Async = true,
+                Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                Indent = true,
+                NewLineChars = Environment.NewLine,
+            };
+
+            await using var writer = XmlWriter.Create(stream, settings);
+            await writer.WriteStartDocumentAsync().ConfigureAwait(false);
+            await writer.WriteStartElementAsync(prefix: string.Empty, localName: "kml", ns: "http://www.opengis.net/kml/2.2").ConfigureAwait(false);
+            await writer.WriteStartElementAsync(prefix: string.Empty, localName: "Document", ns: null).ConfigureAwait(false);
+
+            await writer.WriteElementStringAsync(null, "name", null, list.Header.Name).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(list.Header.Description))
+            {
+                await writer.WriteElementStringAsync(null, "description", null, list.Header.Description).ConfigureAwait(false);
+            }
+
+            foreach (var place in list.Places)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await writer.WriteStartElementAsync(null, "Placemark", null).ConfigureAwait(false);
+                await writer.WriteElementStringAsync(null, "name", null, place.Name).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(place.Note))
+                {
+                    await writer.WriteElementStringAsync(null, "description", null, place.Note).ConfigureAwait(false);
+                }
+
+                await writer.WriteStartElementAsync(null, "Point", null).ConfigureAwait(false);
+                var coordinates = string.Create(CultureInfo.InvariantCulture, $"{place.Longitude},{place.Latitude},0");
+                await writer.WriteElementStringAsync(null, "coordinates", null, coordinates).ConfigureAwait(false);
+                await writer.WriteEndElementAsync().ConfigureAwait(false); // Point
+
+                if (!string.IsNullOrWhiteSpace(place.Address))
+                {
+                    await writer.WriteElementStringAsync(null, "address", null, place.Address).ConfigureAwait(false);
+                }
+
+                if (!string.IsNullOrWhiteSpace(place.ImageUrl))
+                {
+                    await writer.WriteStartElementAsync(null, "ExtendedData", null).ConfigureAwait(false);
+                    await writer.WriteStartElementAsync(null, "Data", null).ConfigureAwait(false);
+                    await writer.WriteAttributeStringAsync(null, "name", null, "imageUrl").ConfigureAwait(false);
+                    await writer.WriteElementStringAsync(null, "value", null, place.ImageUrl).ConfigureAwait(false);
+                    await writer.WriteEndElementAsync().ConfigureAwait(false);
+                    await writer.WriteEndElementAsync().ConfigureAwait(false);
+                }
+
+                await writer.WriteEndElementAsync().ConfigureAwait(false); // Placemark
+            }
+
+            await writer.WriteEndElementAsync().ConfigureAwait(false); // Document
+            await writer.WriteEndElementAsync().ConfigureAwait(false); // kml
+            await writer.WriteEndDocumentAsync().ConfigureAwait(false);
+            await writer.FlushAsync().ConfigureAwait(false);
+
+            _logger.LogInformation(ResourceCatalog.Logs.GetString("KmlWriteCompleted") ?? "KML export completed ({0} places).", list.Places.Count);
         }
-
-        var kmlNamespace = XNamespace.Get("http://www.opengis.net/kml/2.2");
-        var documentElement = new XElement(kmlNamespace + "Document",
-            new XElement(kmlNamespace + "name", list.Header.Name),
-            new XElement(kmlNamespace + "description", list.Header.Description ?? string.Empty));
-
-        foreach (var place in list.Places)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var placemark = new XElement(kmlNamespace + "Placemark",
-                new XElement(kmlNamespace + "name", place.Name),
-                new XElement(kmlNamespace + "description", BuildDescriptionFragment(place)),
-                new XElement(kmlNamespace + "Point",
-                    new XElement(kmlNamespace + "coordinates", FormatCoordinates(place.Longitude, place.Latitude))));
-
-            documentElement.Add(placemark);
+            _logger.LogError(ex, ResourceCatalog.Errors.GetString("KmlWriteFailed") ?? "Failed to persist KML output to path '{0}'.", _path);
+            throw;
         }
-
-        var kmlDocument = new XDocument(
-            new XDeclaration("1.0", "utf-8", "yes"),
-            new XElement(kmlNamespace + "kml", documentElement));
-
-        await using var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read, 4096, useAsync: true);
-        await Task.Run(() => kmlDocument.Save(stream), cancellationToken).ConfigureAwait(false);
-
-        _logger.LogDebug("KML output written to {FilePath}", filePath);
-    }
-
-    private static string FormatCoordinates(double? longitude, double? latitude)
-    {
-        if (longitude is null || latitude is null)
-        {
-            return string.Empty;
-        }
-
-        return string.Create(CultureInfo.InvariantCulture, $"{longitude.Value},{latitude.Value},0");
-    }
-
-    private static string BuildDescriptionFragment(SavedPlace place)
-    {
-        var builder = new StringBuilder();
-        if (!string.IsNullOrWhiteSpace(place.Address))
-        {
-            builder.AppendLine(place.Address);
-        }
-
-        if (!string.IsNullOrWhiteSpace(place.Note))
-        {
-            builder.AppendLine(place.Note);
-        }
-
-        if (!string.IsNullOrWhiteSpace(place.ImageUrl))
-        {
-            builder.Append("Image: ").Append(place.ImageUrl);
-        }
-
-        return builder.ToString().Trim();
     }
 }

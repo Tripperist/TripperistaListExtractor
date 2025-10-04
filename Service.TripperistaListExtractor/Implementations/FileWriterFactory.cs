@@ -1,18 +1,21 @@
+using Microsoft.Extensions.Logging;
+using Service.TripperistaListExtractor.Contracts;
+using Service.TripperistaListExtractor.Writers;
+
 namespace Service.TripperistaListExtractor.Implementations;
 
-using Microsoft.Extensions.DependencyInjection;
-using Service.TripperistaListExtractor.Contracts;
-
 /// <summary>
-///     Provides factory methods that leverage the dependency injection container to create file writers.
+/// Provides factory methods for CSV and KML writers.
 /// </summary>
-public sealed class FileWriterFactory(IServiceProvider serviceProvider) : IFileWriterFactory
+public sealed class FileWriterFactory(ILoggerFactory loggerFactory) : IFileWriterFactory
 {
-    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    private readonly ILoggerFactory _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
 
     /// <inheritdoc />
-    public ICsvFileWriter CreateCsvWriter() => _serviceProvider.GetRequiredService<ICsvFileWriter>();
+    public ICsvFileWriter CreateCsv(string path)
+        => new CsvFileWriter(path, _loggerFactory.CreateLogger<CsvFileWriter>());
 
     /// <inheritdoc />
-    public IKmlFileWriter CreateKmlWriter() => _serviceProvider.GetRequiredService<IKmlFileWriter>();
+    public IKmlFileWriter CreateKml(string path)
+        => new KmlFileWriter(path, _loggerFactory.CreateLogger<KmlFileWriter>());
 }
